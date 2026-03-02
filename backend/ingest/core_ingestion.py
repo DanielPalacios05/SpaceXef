@@ -28,17 +28,24 @@ def parse_and_map_launches(docs: list) -> list:
     mapped_items = []
     
     for doc in docs:
+
         if not isinstance(doc, dict):
             continue
+        
+        launch_id = doc.get("id")
+        if not launch_id:
+            continue
+
+        date_unix = doc.get("date_unix") or 0
             
-        # 1. Calculate Status
+        # Calculate Status
         status = "failed"
         if doc.get("upcoming"):
             status = "upcoming"
         elif doc.get("success"):
             status = "success"
             
-        # 2. Map Rocket
+        # Map Rocket
         rocket_obj = doc.get("rocket")
         rocket_data = None
         if isinstance(rocket_obj, dict):
@@ -96,12 +103,7 @@ def parse_and_map_launches(docs: list) -> list:
                         "reason": f.get("reason")
                     })
 
-        # 6. Base Item mapping
-        launch_id = doc.get("id")
-        date_unix = doc.get("date_unix") or 0
-        
-        if not launch_id:
-            continue
+
             
         mapped_item = {
             "id": launch_id,
@@ -129,18 +131,18 @@ def insert_launches(table, mapped_items: list) -> dict:
     updated = 0
     
     for item in mapped_items:
-        # 1. Float to Decimal Conversion
+        # Float to Decimal Conversion
         item_json = json.dumps(item)
         db_item = json.loads(item_json, parse_float=Decimal)
         
-        # 2. Set DynamoDB PK and SK
+        # Set DynamoDB PK and SK
         launch_id = db_item.get('id')
         date_unix = db_item.get('launch_date', 0)
         
         db_item['PK'] = 'LAUNCH'
         db_item['SK'] = f"{str(date_unix).zfill(15)}#{launch_id}"
         
-        # 3. Put Item and count Returns
+        # Put Item and count Returns
         response = table.put_item(
             Item=db_item,
             ReturnValues='ALL_OLD'
@@ -158,10 +160,15 @@ def lambda_handler(event, context):
     print("Starting decoupled SpaceX data ingestion...")
     
     DYNAMODB_TABLE = os.environ.get('DYNAMODB_TABLE', 'SpaceXef-Data')
-    dynamodb = boto3.resource('dynamodb')
+    
+    if os.environ.get('LOCAL_DDB'):
+        dynamodb = boto3.resource('dynamodb', endpoint_url='http://localhost:8000', region_name='us-east-1', aws_access_key_id='test', aws_secret_access_key='test')
+    else:
+        dynamodb = boto3.resource('dynamodb')
+        
     table = dynamodb.Table(DYNAMODB_TABLE)
     
-    # 1. Define query logic
+    # Define query logic
     query_body = {
         "query": {},
         "options": {
@@ -191,15 +198,15 @@ def lambda_handler(event, context):
         }
     }
     
-    # 2. Fetch
+    # Fetch
     response_data = fetch_spacex_data('https://api.spacexdata.com/v5/launches/query', query_body)
     docs = response_data.get('docs', [])
     analyzed = response_data.get('totalDocs', len(docs))
     
-    # 3. Parse and Map
+    # Parse and Map
     mapped_items = parse_and_map_launches(docs)
     
-    # 4. Insert
+    # Insert
     insert_results = insert_launches(table, mapped_items)
     inserted = insert_results["inserted"]
     updated = insert_results["updated"]
@@ -216,3 +223,6 @@ def lambda_handler(event, context):
             'updated': updated
         })
     }
+
+if __name__ == "__main__":
+    lambda_handler(None, None)

@@ -6,12 +6,6 @@ on:
     paths:
       - 'backend/**'
       - 'template.yaml'
-  pull_request:
-    branches: [ "main" ]
-    paths:
-      - 'backend/**'
-      - 'template.yaml'
-
 jobs:
   test:
     name: Run Unit Tests
@@ -42,7 +36,6 @@ jobs:
     name: Deploy to AWS
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
       

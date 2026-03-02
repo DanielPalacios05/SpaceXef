@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'SpaceXef Backend - SAM Template Single-Table DynamoDB, FastAPI App,
+  Data Ingestion Script
+
+  '
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.13
+    Architectures:
+    - x86_64
+    Environment:
+      Variables:
+        DYNAMODB_TABLE:
+          Ref: SpaceXefTable
+Resources:
+  SpaceXefTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: SpaceXef-Data
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: PK
+        AttributeType: S
+      - AttributeName: SK
+        AttributeType: S
+      KeySchema:
+      - AttributeName: PK
+        KeyType: HASH
+      - AttributeName: SK
+        KeyType: RANGE
+  IngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: IngestFunction
+      Handler: core_ingestion.lambda_handler
+      Timeout: 300
+      MemorySize: 512
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: SpaceXefTable
+      Events:
+        ScheduleEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(6 hours)
+            Name: SpaceXef-Ingestion-Schedule
+            Description: Triggers the Ingest function every 6 hours
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /ingest
+            Method: POST
+    Metadata:
+      SamResourceId: IngestFunction
+  AppFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: AppFunction
+      Handler: main.handler
+      Timeout: 10
+      MemorySize: 256
+      Policies:
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: SpaceXefTable
+      Events:
+        ApiRoot:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+        ApiProxy:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+    Metadata:
+      SamResourceId: AppFunction
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL for Prod environment
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/

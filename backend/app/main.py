@@ -21,7 +21,12 @@ app.add_middleware(
 )
 
 DYNAMODB_TABLE = os.environ.get('DYNAMODB_TABLE', 'SpaceXef-Data')
-dynamodb = boto3.resource('dynamodb')
+
+if os.environ.get('LOCAL_DDB'):
+    dynamodb = boto3.resource('dynamodb', endpoint_url='http://localhost:8000', region_name='us-east-1', aws_access_key_id='test', aws_secret_access_key='test')
+else:
+    dynamodb = boto3.resource('dynamodb')
+    
 table = dynamodb.Table(DYNAMODB_TABLE)
 
 def encode_cursor(key_dict: dict) -> str:
@@ -83,27 +88,12 @@ def get_launches(
         response = table.query(**query_kwargs)
         items = response.get('Items', [])
         
-        # When using FilterExpression with Limit, DynamoDB applies the Limit BEFORE the Filter.
-        # So we might get fewer items than requested even if there's more data.
-        # But for this simple implementation, we rely purely on the native response.
         
         last_evaluated_key = response.get('LastEvaluatedKey')
         next_cursor = encode_cursor(last_evaluated_key) if last_evaluated_key else None
         
-        # Convert Decimals to integers/floats for JSON compatibility
-        def replace_decimals(obj):
-            from decimal import Decimal
-            if isinstance(obj, list):
-                return [replace_decimals(i) for i in obj]
-            elif isinstance(obj, dict):
-                return {k: replace_decimals(v) for k, v in obj.items()}
-            elif isinstance(obj, Decimal):
-                if obj % 1 == 0:
-                    return int(obj)
-                return float(obj)
-            return obj
-            
-        clean_items = replace_decimals(items)
+
+        clean_items = items
         
         return {
             "docs": clean_items,
