@@ -1,41 +1,41 @@
-# SpaceXef Backend - Launch Visualization Platform
+# Backend de SpaceXef - Plataforma de Visualización de Lanzamientos
 
-This repository contains the completely serverless backend for the SpaceXef (SpaceX Efficient Finding) Launch Visualization Platform.
+Este repositorio contiene el backend completamente serverless (sin servidor) para la Plataforma de Visualización de Lanzamientos SpaceXef (SpaceX Efficient Finding).
 
-The architecture is built completely on AWS Serverless infrastructure (Lambda, API Gateway, DynamoDB), defined securely as Code natively via AWS SAM (Serverless Application Model). It is highly optimized using Single-Table DynamoDB design principles for instantaneous Read performance.
+La arquitectura está construida completamente sobre infraestructura Serverless de AWS (Lambda, API Gateway, DynamoDB), definida de forma segura como Código de manera nativa a través de AWS SAM (Serverless Application Model). Está altamente optimizada utilizando los principios de diseño de Tabla Única (Single-Table) de DynamoDB para un rendimiento de lectura instantáneo.
 
-## Architecture & Infrastructure
+## Arquitectura e Infraestructura
 
-### 1. The Database (`SpaceXef-Data`)
-We use an **Amazon DynamoDB Single-Table** strategy to optimize for read queries.
-- **Partition Key (PK):** Heavily overloaded to `LAUNCH`.
-- **Sort Key (SK):** A padded chronological Unix-timestamp combined with the Launch ID natively formatting data into a time-series string: `<padded_unix_date>#<launch_id>`. Example: `000001669852800#633f72580531...`.
-- *Why this matters*: We can execute a blazing-fast DynamoDB `Query` scanning backward instantly chronologically by Date (without needing full expensive table `Scans` or manually sorting objects post-retrieval).
+### 1. La Base de Datos (`SpaceXef-Data`)
+Utilizamos una estrategia de **Tabla Única de Amazon DynamoDB** para optimizar las consultas de lectura.
+- **Clave de Partición (PK):** Fuertemente sobrecargada a `LAUNCH` (Lanzamiento).
+- **Clave de Ordenación (SK):** Una marca de tiempo cronológica Unix rellenada (padded) combinada con el ID del Lanzamiento, formateando de forma nativa los datos en una cadena de series temporales: `<fecha_unix_rellenada>#<id_lanzamiento>`. Ejemplo: `000001669852800#633f72580531...`.
+- *Por qué esto es importante*: Podemos ejecutar una `Consulta` (Query) en DynamoDB ultra rápida escaneando hacia atrás instantáneamente de manera cronológica por Fecha (sin necesidad de costosos `Escaneos` (Scans) completos de tabla o de clasificar manualmente los objetos después de obtenerlos).
 
-### 2. Ingestion Pipeline (`backend/ingest/core_ingestion.py`)
-- Python 3.13 Lambda triggered asynchronously.
-- Connects reliably to the `https://api.spacexdata.com/v5/launches/query` endpoint.
-- Maps, parses, deeply flattens `Rockets`, `Payloads`, and `Crew` objects. 
-- Gracefully handles data abnormalities efficiently inserting updates into DynamoDB.
+### 2. Pipeline de Ingestión (`backend/ingest/core_ingestion.py`)
+- Función Lambda en Python 3.13 ejecutada asíncronamente.
+- Se conecta de forma fiable al endpoint `https://api.spacexdata.com/v5/launches/query`.
+- Mapea, analiza y aplana profundamente los objetos de `Rockets` (Cohetes), `Payloads` (Cargas) y `Crew` (Tripulación). 
+- Maneja con gracia las anomalías de los datos, insertando actualizaciones eficientemente en DynamoDB.
 
-### 3. FastAPI Service (`backend/app/main.py`)
-- Read-only Python 3.13 REST API using **FastAPI** coupled organically with **Mangum**.
-- Deployed within a Lambda Function attached via an API Gateway Proxy integration mapping traffic flawlessly.
-- Translates dynamic User REST requests cleanly into DynamoDB queries (FilterExpressions for rockets & status).
-- Handles Base64 Token Cursor-based Pagination logic seamlessly natively.
+### 3. Servicio FastAPI (`backend/app/main.py`)
+- REST API de solo lectura en Python 3.13 usando **FastAPI** orgánicamente acoplado con **Mangum**.
+- Desplegado dentro de una función Lambda conectada mediante una integración de Proxy API Gateway que mapea el tráfico impecablemente.
+- Traduce las peticiones REST dinámicas del usuario limpiamente en consultas de DynamoDB (FilterExpressions para cohetes y estado).
+- Maneja la lógica de Paginación basada en cursores y tokens Base64 de forma transparente y nativa.
 
 ---
 
-## Testing & Quality Assurance Infrastructure
+## Infraestructura de Pruebas y Control de Calidad
 
-This code base enforces strict separation of concerns, decoupling the Ingestion script logic strictly for Test-Driven Development logic utilizing `pytest`.
+Este código base impone una estricta separación de responsabilidades, desacoplando la lógica del script de Ingestión rigurosamente para una lógica TDD (Desarrollo Guiado por Pruebas) utilizando `pytest`.
 
-### The Test Stack
-* **`pytest`**: Runner framework enforcing test boundaries.
-* **`moto[dynamodb]`**: Spins up fully mock AWS services rapidly in-memory to safely assert correct database transaction mapping and overrides (testing `PK`, `SK` strings dynamically and Boto3 Python Float mappings) without polluting actual external databases.
-* **`unittest.mock`**: Enforces graceful error degradations isolating `urllib` HTTP calls.
+### El Stack de Pruebas
+* **`pytest`**: Framework de ejecución de pruebas para exigir límites estrictos.
+* **`moto[dynamodb]`**: Levanta servicios AWS completamente simulados (mock) rápidamente en memoria para afirmar de forma segura el correcto mapeo de transacciones de bases de datos y sobreescrituras (probando dinámicamente cadenas de `PK` y `SK`, además de conversiones de Float en Boto3 Python) sin contaminar bases de datos externas reales.
+* **`unittest.mock`**: Impone degradaciones seguras para aislar llamadas HTTP con `urllib`.
 
-To run the unit tests natively locally:
+Para ejecutar las pruebas unitarias localmente de forma nativa:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
@@ -46,23 +46,23 @@ PYTHONPATH=backend/ingest LOCAL_DDB=1 python3 -m pytest backend/ingest/tests/ -v
 
 ---
 
-## Local Development Guide
+## Guía de Desarrollo Local
 
-You can easily run this entire ecosystem securely fully offline decoupled from your actual AWS cloud accounts! 
+¡Puedes ejecutar todo este ecosistema fácilmente, offline y completamente seguro, desacoplado de tus verdaderas cuentas de AWS en la nube! 
 
-### Prerequisites
+### Prerrequisitos
 
 1.  [Python 3.13](https://www.python.org/downloads/)
-2.  [Docker CLI](https://docs.docker.com/get-docker/) (used to mock AWS Databases entirely natively in memory).
+2.  [Docker CLI](https://docs.docker.com/get-docker/) (utilizado para simular de forma completamente nativa bases de datos AWS en memoria).
 
-### 1. Start the Local Mock Database
-Spin up standard `dynamodb-local` natively using Docker. Leave this running securely quietly in the background on Port `8000`:
+### 1. Iniciar la Base de Datos Local Simulada (Mock)
+Levanta de forma nativa la base `dynamodb-local` utilizando Docker. Deja esto ejecutándose silenciosa y seguramente de fondo en el puerto `8000`:
 ```bash
 docker run -d -p 8000:8000 --name dynamodb-local amazon/dynamodb-local
 ```
 
-### 2. Create the Mock Table
-We need to rapidly construct the required schema internally in the local image:
+### 2. Crear la Tabla Simulada (Mock Table)
+Necesitamos construir rápidamente el esquema requerido internamente en la imagen local:
 ```bash
 AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 aws dynamodb create-table \
     --table-name SpaceXef-Data \
@@ -72,24 +72,24 @@ AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 a
     --endpoint-url http://localhost:8000
 ```
 
-### 3. Populate Data (Run Ingestion Offline)
-Inject data securely from the SpaceX API exactly mapped into your brand new Mock Dynamo Database Container! 
-*(By padding environment variable `LOCAL_DDB=1`, our secure decoupled boto3 implementation intercepts internet requests securely forcing traffic straight to local port 8000).*
+### 3. Poblar los Datos (Ejecutar Ingestión Offline)
+¡Inyecta datos de forma segura de la API de SpaceX directamente mapeados hacia tu Nuevo Contenedor de Base de Datos Dynamo Simulada!
+*(Al añadir la variable de entorno `LOCAL_DDB=1`, nuestra implementación desacoplada y segura de boto3 intercepta las peticiones de internet y fuerza el tráfico directo hacia el puerto local 8000).*
 
 ```bash
 pip install -r backend/ingest/requirements-dev.txt
 LOCAL_DDB=1 python3 backend/ingest/core_ingestion.py
 ```
 
-### 4. Run the API Ecosystem locally
-Once ingestion perfectly succeeds, spin down to root and natively boot FastAPI utilizing `uvicorn`.
+### 4. Ejecutar el Ecosistema de la API localmente
+Una vez que la ingestión ocurre perfectamente y con éxito, sitúate en la raíz e inicia de forma nativa FastAPI utilizando `uvicorn`.
 
 ```bash
 pip3 install -r backend/app/requirements.txt
 LOCAL_DDB=1 python3 -m uvicorn backend.app.main:app --reload --port 8001
 ```
 
-**And you're done!** 
-Fully decoupled real-world visualization traffic natively available safely:
-* **JSON Read Route:** [http://localhost:8001/launches?limit=2](http://localhost:8001/launches?limit=2)
+**¡Y listo!** 
+Tráfico de visualización del mundo real totalmente desacoplado y disponible de forma segura y nativa:
+* **Ruta de Lectura JSON:** [http://localhost:8001/launches?limit=2](http://localhost:8001/launches?limit=2)
 * **API Interactive Swagger Documentation:** [http://localhost:8001/docs](http://localhost:8001/docs)

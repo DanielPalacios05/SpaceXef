@@ -23,15 +23,24 @@ def fetch_spacex_data(url: str, query_body: dict) -> dict:
         print(f"Error fetching {url}: {e}")
         return {}
 
-def parse_and_map_launches(docs: list) -> list:
+def parse_and_map_launches(docs: list) -> dict:
     """Parses raw SpaceX 'docs' into precisely mapped dictionary schema."""
     mapped_items = []
+    rockets = {}
+    stats = {
+        "total": 0,
+        "failures": 0
+    }
     
     for doc in docs:
-        launch_id = doc.get("id")
-        if not isinstance(doc, dict) or not launch_id:
+
+        if not isinstance(doc, dict):
             continue
         
+        launch_id = doc.get("id")
+        if not launch_id:
+            continue
+
         date_unix = doc.get("date_unix") or 0
             
         # Calculate Status
@@ -55,6 +64,8 @@ def parse_and_map_launches(docs: list) -> list:
                 "description": rocket_obj.get("description"),
                 "image": flickr_images[0] if flickr_images and isinstance(flickr_images, list) else None
             }
+            if rocket_data["id"]:
+                rockets[rocket_data["id"]] = rocket_data
             
         # 3. Map Payloads
         payloads_list = doc.get("payloads", [])
@@ -118,15 +129,24 @@ def parse_and_map_launches(docs: list) -> list:
         }
         
         mapped_items.append(mapped_item)
+            
+        stats["total"] += 1
+        if status == "failed":
+            stats["failures"] += 1
         
-    return mapped_items
+    return {
+        "items": mapped_items,
+        "rockets": list(rockets.values()),
+        "stats": stats
+    }
 
-def insert_launches(table, mapped_items: list) -> dict:
-    """Inserts or updates the mapped items safely in DynamoDB handling Float to Decimal conversions."""
+def insert_data(table, parsed_data: dict) -> dict:
+    """Inserts or updates all mapped data safely in DynamoDB handling Float to Decimal conversions."""
     inserted = 0
     updated = 0
     
-    for item in mapped_items:
+    # 1. Insert Launches
+    for item in parsed_data.get("items", []):
         # Float to Decimal Conversion
         item_json = json.dumps(item)
         db_item = json.loads(item_json, parse_float=Decimal)
@@ -149,6 +169,23 @@ def insert_launches(table, mapped_items: list) -> dict:
         else:
             inserted += 1
             
+    # 2. Insert Rockets
+    for rocket in parsed_data.get("rockets", []):
+        rocket_json = json.dumps(rocket)
+        db_rocket = json.loads(rocket_json, parse_float=Decimal)
+        db_rocket['PK'] = 'ROCKET'
+        db_rocket['SK'] = f"ROCKET#{db_rocket['id']}"
+        table.put_item(Item=db_rocket)
+        
+    # 3. Insert Stats
+    if "stats" in parsed_data:
+        stats = parsed_data["stats"]
+        stats_json = json.dumps(stats)
+        db_stats = json.loads(stats_json, parse_float=Decimal)
+        db_stats['PK'] = 'STATS'
+        db_stats['SK'] = 'OVERVIEW'
+        table.put_item(Item=db_stats)
+            
     return {"inserted": inserted, "updated": updated}
 
 
@@ -156,7 +193,12 @@ def lambda_handler(event, context):
     print("Starting decoupled SpaceX data ingestion...")
     
     DYNAMODB_TABLE = os.environ.get('DYNAMODB_TABLE', 'SpaceXef-Data')
-    dynamodb = boto3.resource('dynamodb')
+    
+    if os.environ.get('LOCAL_DDB'):
+        dynamodb = boto3.resource('dynamodb', endpoint_url='http://localhost:8000', region_name='us-east-1', aws_access_key_id='test', aws_secret_access_key='test')
+    else:
+        dynamodb = boto3.resource('dynamodb')
+        
     table = dynamodb.Table(DYNAMODB_TABLE)
     
     # Define query logic
@@ -195,10 +237,10 @@ def lambda_handler(event, context):
     analyzed = response_data.get('totalDocs', len(docs))
     
     # Parse and Map
-    mapped_items = parse_and_map_launches(docs)
+    parsed_data = parse_and_map_launches(docs)
     
-    # Insert
-    insert_results = insert_launches(table, mapped_items)
+    # Insert Data (Launches, Rockets, Stats)
+    insert_results = insert_data(table, parsed_data)
     inserted = insert_results["inserted"]
     updated = insert_results["updated"]
 
@@ -214,3 +256,6 @@ def lambda_handler(event, context):
             'updated': updated
         })
     }
+
+if __name__ == "__main__":
+    lambda_handler(None, None)

@@ -49,7 +49,8 @@ def get_launches(
     limit: int = Query(50, ge=1, le=200, description="Number of items to return per page"),
     next_token: Optional[str] = Query(None, description="Pagination cursor for the next page"),
     status: Optional[str] = Query(None, description="Filter by status (success, failed, upcoming)"),
-    rocket: Optional[str] = Query(None, description="Filter by specific Rocket ID")
+    rocket: Optional[str] = Query(None, description="Filter by specific Rocket ID"),
+    search: Optional[str] = Query(None, description="Search by mission name")
 ):
     """
     Retrieves dynamically padded chronologically sorted SpaceX launches from DynamoDB.
@@ -72,15 +73,18 @@ def get_launches(
         query_kwargs['ExclusiveStartKey'] = start_key
         
     # 4. Build Optional FilterExpressions
-    filter_expression = None
-    if status and rocket:
-        filter_expression = Attr('status').eq(status) & Attr('rocket.id').eq(rocket)
-    elif status:
-        filter_expression = Attr('status').eq(status)
-    elif rocket:
-        filter_expression = Attr('rocket.id').eq(rocket)
+    conditions = []
+    if status:
+        conditions.append(Attr('status').eq(status))
+    if rocket:
+        conditions.append(Attr('rocket.id').eq(rocket))
+    if search:
+        conditions.append(Attr('name').contains(search))
         
-    if filter_expression:
+    if conditions:
+        filter_expression = conditions[0]
+        for condition in conditions[1:]:
+            filter_expression = filter_expression & condition
         query_kwargs['FilterExpression'] = filter_expression
 
     # 5. Execute DynamoDB Query natively
@@ -102,6 +106,41 @@ def get_launches(
             "has_next_page": bool(next_cursor)
         }
         
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/stats")
+def get_stats():
+    """Retrieves aggregated statistics and timeline from DynamoDB."""
+    try:
+        response = table.get_item(Key={'PK': 'STATS', 'SK': 'OVERVIEW'})
+        item = response.get('Item')
+        if not item:
+            raise HTTPException(status_code=404, detail="Stats not found")
+        return item
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/launches/{launch_id}")
+def get_launch(launch_id: str):
+    """Retrieves full details for a specific launch using its SK (date_unix#id)."""
+    try:
+        response = table.get_item(Key={'PK': 'LAUNCH', 'SK': launch_id})
+        item = response.get('Item')
+        if not item:
+            raise HTTPException(status_code=404, detail="Launch not found")
+        return item
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
+@app.get("/rockets")
+def get_rockets():
+    """Retrieves all standalone rocket records from DynamoDB."""
+    try:
+        response = table.query(
+            KeyConditionExpression=Key('PK').eq('ROCKET')
+        )
+        return {"items": response.get('Items', []), "count": response.get('Count', 0)}
     except ClientError as e:
         raise HTTPException(status_code=500, detail=str(e))
 

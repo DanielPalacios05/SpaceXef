@@ -29,7 +29,8 @@ def test_parse_and_map_launches_success():
         "failures": [{"time": 10, "altitude": 50, "reason": "engine"}]
     }]
     
-    result = parse_and_map_launches(mock_docs)
+    parsed_data = parse_and_map_launches(mock_docs)
+    result = parsed_data["items"]
     
     assert len(result) == 1
     item = result[0]
@@ -56,7 +57,8 @@ def test_parse_and_map_launches_missing_data():
         "failures": "not_a_list"
     }]
     
-    result = parse_and_map_launches(mock_docs)
+    parsed_data = parse_and_map_launches(mock_docs)
+    result = parsed_data["items"]
     assert len(result) == 1
     item = result[0]
     
@@ -68,10 +70,12 @@ def test_parse_and_map_launches_missing_data():
 
 def test_parse_and_map_invalid_doc_type():
     mock_docs = ["invalid_string", 123, None]
-    result = parse_and_map_launches(mock_docs)
+    parsed_data = parse_and_map_launches(mock_docs)
+    result = parsed_data["items"]
     assert len(result) == 0
 
 def test_parse_and_map_missing_id():
     mock_docs = [{"name": "No ID Launch"}]
-    result = parse_and_map_launches(mock_docs)
+    parsed_data = parse_and_map_launches(mock_docs)
+    result = parsed_data["items"]
     assert len(result) == 0
