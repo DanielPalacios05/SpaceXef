@@ -29,7 +29,9 @@ def parse_and_map_launches(docs: list) -> dict:
     rockets = {}
     stats = {
         "total": 0,
-        "failures": 0
+        "failures": 0,
+        "total_payload_mass": 0,
+        "humans_traveled": 0
     }
     
     for doc in docs:
@@ -73,11 +75,15 @@ def parse_and_map_launches(docs: list) -> dict:
         if isinstance(payloads_list, list):
             for p in payloads_list:
                 if isinstance(p, dict):
+                    mass = p.get("mass_kg")
+                    if mass and isinstance(mass, (int, float)):
+                        stats["total_payload_mass"] += mass
+                        
                     payload_data.append({
                         "id": p.get("id"),
                         "name": p.get("name"),
                         "type": p.get("type"),
-                        "mass": p.get("mass_kg")
+                        "mass": mass
                     })
                     
         # 4. Map Crew
@@ -86,6 +92,7 @@ def parse_and_map_launches(docs: list) -> dict:
         if isinstance(crew_list, list):
             for c in crew_list:
                 if isinstance(c, dict) and "crew" in c and isinstance(c["crew"], dict):
+                    stats["humans_traveled"] += 1
                     astronaut = c["crew"]
                     crew_data.append({
                         "id": astronaut.get("id"),

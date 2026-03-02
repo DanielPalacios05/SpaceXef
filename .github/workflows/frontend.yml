@@ -1,0 +1,41 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'frontend/spacexef/**'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'frontend/spacexef/**'
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./frontend/spacexef
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+        cache-dependency-path: ./frontend/spacexef/package-lock.json
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run linting
+      run: npm run lint
+      
+    - name: Run unit tests
+      run: npx vitest run
+      
+    - name: Build generic Next.js app
+      run: npm run build
