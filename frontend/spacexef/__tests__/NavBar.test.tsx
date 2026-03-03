@@ -12,7 +12,7 @@ vi.mock("next/navigation", () => {
 // Simple mock for Next.js router links and images
 vi.mock("next/link", () => {
     return {
-        default: ({ children, href, onClick, className }: any) => {
+        default: ({ children, href, onClick, className }: { children: React.ReactNode; href: string; onClick?: () => void; className?: string }) => {
             return <a href={href} onClick={onClick} className={className}>{children}</a>;
         },
     };
@@ -20,7 +20,7 @@ vi.mock("next/link", () => {
 
 vi.mock("next/image", () => {
     return {
-        default: (props: any) => {
+        default: (props: Record<string, unknown>) => {
             // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
             return <img {...props} />;
         },

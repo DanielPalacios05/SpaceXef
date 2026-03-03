@@ -89,21 +89,45 @@ def get_launches(
 
     # 5. Execute DynamoDB Query natively
     try:
-        response = table.query(**query_kwargs)
-        items = response.get('Items', [])
+        items = []
+        last_evaluated_key = start_key
         
+        # Loop until we satisfy the requested limit, to bypass DynamoDB's filter dropping mechanism
+        while len(items) < limit:
+            if last_evaluated_key:
+                query_kwargs['ExclusiveStartKey'] = last_evaluated_key
+            else:
+                if 'ExclusiveStartKey' in query_kwargs:
+                    del query_kwargs['ExclusiveStartKey']
+                    
+            response = table.query(**query_kwargs)
+            items.extend(response.get('Items', []))
+            
+            last_evaluated_key = response.get('LastEvaluatedKey')
+            if not last_evaluated_key:
+                break
+                
+        # Trim to exact limit
+        page_items = items[:limit]
         
-        last_evaluated_key = response.get('LastEvaluatedKey')
-        next_cursor = encode_cursor(last_evaluated_key) if last_evaluated_key else None
-        
-
-        clean_items = items
+        # Determine the next cursor accurately
+        if len(items) > limit:
+            last_item = page_items[-1]
+            next_cursor_dict = {'PK': last_item.get('PK'), 'SK': last_item.get('SK')}
+            next_cursor = encode_cursor(next_cursor_dict)
+            has_next_page = True
+        elif last_evaluated_key:
+            next_cursor = encode_cursor(last_evaluated_key)
+            has_next_page = True
+        else:
+            next_cursor = None
+            has_next_page = False
         
         return {
-            "docs": clean_items,
-            "count": len(clean_items),
+            "docs": page_items,
+            "count": len(page_items),
             "next_token": next_cursor,
-            "has_next_page": bool(next_cursor)
+            "has_next_page": has_next_page
         }
         
     except ClientError as e:

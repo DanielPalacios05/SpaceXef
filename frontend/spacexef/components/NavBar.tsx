@@ -6,25 +6,27 @@ import { Rocket, CalendarDays, Globe, Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 
+const NAV_LINKS = [
+    { href: "/", label: "Home", icon: Globe },
+    { href: "/launches", label: "Launches", icon: CalendarDays },
+    { href: "/rockets", label: "Rockets", icon: Rocket },
+] as const;
+
 export function NavBar() {
     const [isOpen, setIsOpen] = useState(false);
     const pathname = usePathname();
 
-    // Close menu when route changes
+    // Close menu on route change
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         setIsOpen(false);
     }, [pathname]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     // Prevent body scroll when menu is open
     useEffect(() => {
-        if (isOpen) {
-            document.body.style.overflow = "hidden";
-        } else {
-            document.body.style.overflow = "";
-        }
-        return () => {
-            document.body.style.overflow = "";
-        };
+        document.body.style.overflow = isOpen ? "hidden" : "";
+        return () => { document.body.style.overflow = ""; };
     }, [isOpen]);
 
     return (
@@ -46,27 +48,15 @@ export function NavBar() {
 
                     {/* Desktop Links */}
                     <div className="hidden md:flex items-center space-x-8 text-sm font-medium tracking-widest uppercase">
-                        <Link
-                            href="/"
-                            className={`transition-colors flex items-center gap-2 ${pathname === "/" ? "text-white" : "text-gray-400 hover:text-white"
-                                }`}
-                        >
-                            <Globe size={16} /> Home
-                        </Link>
-                        <Link
-                            href="/launches"
-                            className={`transition-colors flex items-center gap-2 ${pathname === "/launches" ? "text-white" : "text-gray-400 hover:text-white"
-                                }`}
-                        >
-                            <CalendarDays size={16} /> Launches
-                        </Link>
-                        <Link
-                            href="/rockets"
-                            className={`transition-colors flex items-center gap-2 ${pathname === "/rockets" ? "text-white" : "text-gray-400 hover:text-white"
-                                }`}
-                        >
-                            <Rocket size={16} /> Rockets
-                        </Link>
+                        {NAV_LINKS.map(({ href, label, icon: Icon }) => (
+                            <Link
+                                key={href}
+                                href={href}
+                                className={`transition-colors flex items-center gap-2 ${pathname === href ? "text-white" : "text-gray-400 hover:text-white"}`}
+                            >
+                                <Icon size={16} /> {label}
+                            </Link>
+                        ))}
                     </div>
 
                     {/* Mobile Menu Toggle */}
@@ -84,32 +74,19 @@ export function NavBar() {
             <div
                 className={`fixed inset-0 z-40 bg-black/95 backdrop-blur-lg transition-all duration-300 ease-in-out flex flex-col items-center justify-center space-y-8 md:hidden ${isOpen ? "opacity-100 pointer-events-auto visible" : "opacity-0 pointer-events-none invisible"
                     }`}
-                style={{ paddingTop: '64px' }}
+                style={{ paddingTop: "64px" }}
             >
-                <Link
-                    href="/"
-                    className={`transition-colors flex items-center gap-3 text-2xl font-medium tracking-widest uppercase ${pathname === "/" ? "text-white" : "text-gray-400 hover:text-white"
-                        }`}
-                    onClick={() => setIsOpen(false)}
-                >
-                    <Globe size={24} /> Home
-                </Link>
-                <Link
-                    href="/launches"
-                    className={`transition-colors flex items-center gap-3 text-2xl font-medium tracking-widest uppercase ${pathname === "/launches" ? "text-white" : "text-gray-400 hover:text-white"
-                        }`}
-                    onClick={() => setIsOpen(false)}
-                >
-                    <CalendarDays size={24} /> Launches
-                </Link>
-                <Link
-                    href="/rockets"
-                    className={`transition-colors flex items-center gap-3 text-2xl font-medium tracking-widest uppercase ${pathname === "/rockets" ? "text-white" : "text-gray-400 hover:text-white"
-                        }`}
-                    onClick={() => setIsOpen(false)}
-                >
-                    <Rocket size={24} /> Rockets
-                </Link>
+                {NAV_LINKS.map(({ href, label, icon: Icon }) => (
+                    <Link
+                        key={href}
+                        href={href}
+                        className={`transition-colors flex items-center gap-3 text-2xl font-medium tracking-widest uppercase ${pathname === href ? "text-white" : "text-gray-400 hover:text-white"
+                            }`}
+                        onClick={() => setIsOpen(false)}
+                    >
+                        <Icon size={24} /> {label}
+                    </Link>
+                ))}
             </div>
         </>
     );

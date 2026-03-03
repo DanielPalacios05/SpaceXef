@@ -1,15 +1,17 @@
 import { getStats, getLaunches } from "@/actions/actions";
-import { StatCard } from "@/components/StatCard";
 import { CombinedStatsCard } from "@/components/CombinedStatsCard";
 import { SuccessRateChart } from "@/components/SuccessRateChart";
-import { Rocket, Target, Activity } from "lucide-react";
+import { Rocket } from "lucide-react";
 import Image from "next/image";
+import { LaunchTimeline } from "@/components/LaunchTimeline";
+import { StatusBadge } from "@/components/StatusBadge";
 
 export default async function Home() {
   // Fetch data in parallel
-  const [stats, launchesResponse] = await Promise.all([
+  const [stats, launchesResponse, timelineLaunches] = await Promise.all([
     getStats(),
-    getLaunches(1) // Get the latest launch
+    getLaunches(1), // Get the latest launch
+    getLaunches(10) // Get initial timeline launches
   ]);
 
   const latestLaunch = launchesResponse.docs[0];
@@ -34,7 +36,7 @@ export default async function Home() {
           />
           <h1 className="text-4xl md:text-5xl font-light tracking-tight text-center text-white mb-6">
             Explore the Universe of <div className="inline-block max-w-[220px]">
-              <img src="/space.png" alt="SpaceX" className=" min-w-[270px]" />
+              <Image src="/space.png" alt="SpaceX" width={270} height={80} className="min-w-[270px]" />
             </div>
           </h1>
           <p className="text-lg md:text-xl text-gray-400 font-light max-w-2xl">
@@ -45,8 +47,8 @@ export default async function Home() {
 
       {/* Stats Grid */}
       <section className="w-full max-w-7xl mx-auto px-4 my-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="col-span-1">
+        <div className="flex flex-wrap gap-6">
+          <div className="flex-1 basis-64">
             <CombinedStatsCard
               totalLaunches={stats.total}
               totalPayload={stats.total_payload_mass || 0}
@@ -54,13 +56,13 @@ export default async function Home() {
             />
           </div>
 
-          <div className="col-span-1 md:col-span-1 lg:col-span-1 h-full min-h-[300px]">
+          <div className="flex-1 basis-64  ">
             <SuccessRateChart total={stats.total} failures={stats.failures} />
           </div>
 
           {/* Latest Mission Card */}
           {latestLaunch && (
-            <div className="col-span-1 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm flex flex-col items-center justify-between text-center relative overflow-hidden group hover:border-white/20 transition-colors min-h-[300px]">
+            <div className="flex-1 basis-64 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm flex flex-col items-center justify-between text-center relative overflow-hidden group hover:border-white/20 transition-colors min-h-[300px]">
 
               <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider self-start mb-4">
                 Latest Mission
@@ -85,12 +87,7 @@ export default async function Home() {
               <h4 className="text-2xl font-semibold text-white mb-2">{latestLaunch.name}</h4>
 
               <div className="flex items-center gap-2 mb-2">
-                <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full uppercase tracking-wider ${latestLaunch.status === 'success' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                  latestLaunch.status === 'failed' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                    'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                  }`}>
-                  {latestLaunch.status}
-                </span>
+                <StatusBadge status={latestLaunch.status} />
                 <span className="text-xs text-gray-400">
                   {new Date(latestLaunch.launch_date! * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                 </span>
@@ -111,6 +108,10 @@ export default async function Home() {
             </div>
           )}
         </div>
+      </section>
+
+      <section className="w-full max-w-7xl mx-auto px-4 my-12">
+        <LaunchTimeline initialLaunches={timelineLaunches.docs} initialNextToken={timelineLaunches.next_token} />
       </section>
     </div>
   );

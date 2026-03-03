@@ -23,8 +23,36 @@ def fetch_spacex_data(url: str, query_body: dict) -> dict:
         print(f"Error fetching {url}: {e}")
         return {}
 
-def parse_and_map_launches(docs: list) -> dict:
-    """Parses raw SpaceX 'docs' into precisely mapped dictionary schema."""
+def fetch_v4_rockets() -> list:
+    """Fetches full rocket list from the v4 API to guarantee we have all rockets, requesting only needed fields."""
+    url = "https://api.spacexdata.com/v4/rockets/query"
+    query_body = {
+        "query": {},
+        "options": {
+            "pagination": False,
+            "select": {
+                "id": 1, "name": 1, "height.meters": 1, "diameter.meters": 1,
+                "mass.kg": 1, "description": 1, "flickr_images": 1, "wikipedia": 1
+            }
+        }
+    }
+    data = json.dumps(query_body).encode('utf-8')
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={'User-Agent': 'SpaceXef-Ingestion', 'Content-Type': 'application/json'},
+        method='POST'
+    )
+    try:
+        with urllib.request.urlopen(req) as response:
+            res_json = json.loads(response.read().decode('utf-8'))
+            return res_json.get('docs', [])
+    except Exception as e:
+        print(f"Error fetching rockets from {url}: {e}")
+        return []
+
+def parse_and_map_launches(docs: list, base_rockets: list) -> dict:
+    """Parses raw SpaceX 'docs' into precisely mapped dictionary schema and calculates rocket stats."""
     mapped_items = []
     rockets = {}
     stats = {
@@ -33,7 +61,21 @@ def parse_and_map_launches(docs: list) -> dict:
         "total_payload_mass": 0,
         "humans_traveled": 0
     }
-    
+    # Initialize rockets dictionary from base_rockets first to ensure all are captured
+    for br in base_rockets:
+        if isinstance(br, dict) and "id" in br:
+            rockets[br["id"]] = {
+                "id": br["id"],
+                "name": br.get("name"),
+                "height": br.get("height", {}).get("meters"),
+                "diameter": br.get("diameter", {}).get("meters"),
+                "mass": br.get("mass", {}).get("kg"),
+                "description": br.get("description"),
+                "image": br.get("flickr_images")[0] if br.get("flickr_images") else None,
+                "wikipedia": br.get("wikipedia"),
+                "total_launches": 0  # Initial count
+            }
+            
     for doc in docs:
 
         if not isinstance(doc, dict):
@@ -52,22 +94,30 @@ def parse_and_map_launches(docs: list) -> dict:
         elif doc.get("success"):
             status = "success"
             
-        # Map Rocket
+        # Identify associated rocket correctly to increment count and fetch enriched details
         rocket_obj = doc.get("rocket")
         rocket_data = None
         if isinstance(rocket_obj, dict):
-            flickr_images = rocket_obj.get("flickr_images")
-            rocket_data = {
-                "id": rocket_obj.get("id"),
-                "name": rocket_obj.get("name"),
-                "height": rocket_obj.get("height", {}).get("meters") if isinstance(rocket_obj.get("height"), dict) else None,
-                "diameter": rocket_obj.get("diameter", {}).get("meters") if isinstance(rocket_obj.get("diameter"), dict) else None,
-                "mass": rocket_obj.get("mass", {}).get("kg") if isinstance(rocket_obj.get("mass"), dict) else None,
-                "description": rocket_obj.get("description"),
-                "image": flickr_images[0] if flickr_images and isinstance(flickr_images, list) else None
-            }
-            if rocket_data["id"]:
-                rockets[rocket_data["id"]] = rocket_data
+            r_id = rocket_obj.get("id")
+            if r_id and r_id in rockets:
+                rockets[r_id]["total_launches"] += 1
+                rocket_data = rockets[r_id].copy() # Attach the fully enriched rocket base doc
+            else:
+                # Fallback if rocket wasn't found in v4 base (unlikely but safe)
+                flickr_images = rocket_obj.get("flickr_images")
+                rocket_data = {
+                    "id": r_id,
+                    "name": rocket_obj.get("name"),
+                    "height": rocket_obj.get("height", {}).get("meters") if isinstance(rocket_obj.get("height"), dict) else None,
+                    "diameter": rocket_obj.get("diameter", {}).get("meters") if isinstance(rocket_obj.get("diameter"), dict) else None,
+                    "mass": rocket_obj.get("mass", {}).get("kg") if isinstance(rocket_obj.get("mass"), dict) else None,
+                    "description": rocket_obj.get("description"),
+                    "image": flickr_images[0] if flickr_images and isinstance(flickr_images, list) else None,
+                    "wikipedia": rocket_obj.get("wikipedia"),
+                    "total_launches": 1 # Assume it's their first launch seen
+                }
+                if r_id:
+                    rockets[r_id] = rocket_data
             
         # 3. Map Payloads
         payloads_list = doc.get("payloads", [])
@@ -223,7 +273,7 @@ def lambda_handler(event, context):
                     "path": "rocket",
                     "select": {
                         "id": 1, "name": 1, "height.meters": 1, "diameter.meters": 1,
-                        "mass.kg": 1, "description": 1, "flickr_images": 1
+                        "mass.kg": 1, "description": 1, "flickr_images": 1, "wikipedia": 1
                     }
                 },
                 {
@@ -243,8 +293,11 @@ def lambda_handler(event, context):
     docs = response_data.get('docs', [])
     analyzed = response_data.get('totalDocs', len(docs))
     
+    # Fetch all rockets individually
+    base_rockets = fetch_v4_rockets()
+    
     # Parse and Map
-    parsed_data = parse_and_map_launches(docs)
+    parsed_data = parse_and_map_launches(docs, base_rockets)
     
     # Insert Data (Launches, Rockets, Stats)
     insert_results = insert_data(table, parsed_data)

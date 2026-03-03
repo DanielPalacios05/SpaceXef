@@ -1,90 +1,59 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { Chrono } from "react-chrono";
 import { getLaunches } from "@/actions/actions";
-import { Launch } from "@/domain/models";
+import { SearchFilterBar } from "@/components/SearchFilterBar";
+import { LaunchListCard } from "@/components/LaunchListCard";
+import { InfiniteLaunchScroll } from "@/components/InfiniteLaunchScroll";
 
-export default function LaunchesPage() {
-    const [launches, setLaunches] = useState<Launch[]>([]);
-    const [loading, setLoading] = useState(true);
+export default async function LaunchesPage({
+    searchParams,
+}: {
+    searchParams: { [key: string]: string | undefined };
+}) {
+    // Parse Search Params
+    const search = (await searchParams).search;
+    const status = (await searchParams).status === "all" ? undefined : (await searchParams).status as "success" | "failed" | "upcoming";
+    const nextToken = (await searchParams).next_token;
 
-    useEffect(() => {
-        async function fetchLaunches() {
-            try {
-                const data = await getLaunches(100);
-                setLaunches(data.docs);
-            } catch (error) {
-                console.error("Failed to load launches:", error);
-            } finally {
-                setLoading(false);
-            }
-        }
-        fetchLaunches();
-    }, []);
-
-    if (loading) {
-        return (
-            <div className="flex-1 flex items-center justify-center min-h-[60vh]">
-                <div className="animate-pulse flex flex-col items-center">
-                    <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
-                    <p className="text-gray-400 tracking-widest uppercase text-sm">Loading Timeline...</p>
-                </div>
-            </div>
-        );
-    }
-
-    // Format launches for react-chrono
-    const items = launches.map(launch => {
-        const launchDate = launch.launch_date ? new Date(launch.launch_date * 1000) : new Date();
-        return {
-            title: launchDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short' }),
-            cardTitle: launch.name || "Unknown Mission",
-            cardDetailedText: launch.details || "No detailed description available.",
-            media: {
-                type: "IMAGE" as const,
-                source: {
-                    url: launch.patch || "/logo.png"
-                }
-            }
-        };
-    });
+    // Fetch Data (awaiting Search Params natively supported in Next.js 14+)
+    const launchesResponse = await getLaunches(20, nextToken, status, undefined, search);
+    const launches = launchesResponse.docs;
 
     return (
         <div className="w-full max-w-5xl mx-auto px-4 py-16 flex flex-col items-center">
             <h1 className="text-4xl md:text-5xl font-light tracking-tight text-white mb-2 text-center">
-                Mission <span className="font-semibold text-blue-500">Timeline</span>
+                Mission <span className="font-semibold text-blue-500">Archive</span>
             </h1>
             <p className="text-gray-400 mb-12 text-center max-w-2xl">
                 Explore the rich history of SpaceX launches, chronicling every ascent into the cosmos.
             </p>
 
-            {items.length > 0 ? (
-                <div className="w-full h-[800px] border border-white/10 p-4 md:p-8 rounded-2xl bg-white/5 backdrop-blur-sm">
-                    <Chrono
-                        items={items}
-                        mode="VERTICAL_ALTERNATING"
-                        theme={{
-                            primary: '#3b82f6',
-                            secondary: 'transparent',
-                            cardBgColor: 'rgba(255, 255, 255, 0.05)',
-                            titleColor: '#9ca3af',
-                            titleColorActive: '#ffffff',
-                        }}
-                        cardWidth={400}
-                        cardHeight={200}
-                        disableTimelinePoint
-                        fontSizes={{
-                            cardSubtitle: '0.85rem',
-                            cardText: '0.8rem',
-                            cardTitle: '1.2rem',
-                            title: '1rem',
-                        }}
-                    />
-                </div>
-            ) : (
-                <div className="text-gray-500 text-center mt-10">No launches found.</div>
-            )}
+            {/* Query Filters */}
+            <SearchFilterBar />
+
+            {/* Launch List */}
+            <div className="w-full flex flex-col gap-4">
+                {launches.length > 0 ? (
+                    <>
+                        {launches.map((launch) => (
+                            <LaunchListCard key={launch.id} launch={launch} />
+                        ))}
+
+                        {/* Infinite Scroll trigger handling subsequent pages */}
+                        <InfiniteLaunchScroll
+                            key={`${search || ''}-${status || ''}`}
+                            initialNextToken={launchesResponse.next_token}
+                            search={search}
+                            status={status}
+                        />
+                    </>
+                ) : (
+                    <div className="w-full py-20 text-center flex flex-col items-center border border-white/5 rounded-2xl bg-white/5 backdrop-blur-sm">
+                        <p className="text-gray-400 text-lg">No launches found matching your query.</p>
+                        <button className="mt-4 text-blue-400 hover:text-blue-300 transition-colors" tabIndex={-1}>
+                            Try adjusting your search filters
+                        </button>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

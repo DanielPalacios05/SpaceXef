@@ -32,6 +32,8 @@ export async function getLaunches(
     if (rocketId) params.append("rocket", rocketId);
     if (search) params.append("search", search);
 
+
+
     const res = await fetch(`${API_BASE_URL}/launches?${params.toString()}`, {
         next: { revalidate: 60 * 5 }, // Every 5 minutes
     });

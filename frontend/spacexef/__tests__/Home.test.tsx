@@ -4,7 +4,7 @@ import Home from "@/app/page";
 
 // Mock the Next.js image component
 vi.mock("next/image", () => ({
-    default: (props: any) => {
+    default: (props: Record<string, unknown>) => {
         // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
         return <img {...props} />;
     },
@@ -52,7 +52,7 @@ describe("Home page", () => {
         const HomeComponent = await Home();
         render(HomeComponent);
 
-        expect(screen.getByText("Test Launch")).toBeInTheDocument();
+        expect(screen.getAllByText("Test Launch").length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText("This is a mocked latest launch for testing.")).toBeInTheDocument();
     });
 });
