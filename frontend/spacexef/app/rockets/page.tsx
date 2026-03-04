@@ -1,5 +1,6 @@
 import { getRockets } from "@/actions/actions";
 import { RocketCard } from "@/components/RocketCard";
+export const dynamic = 'force-dynamic';
 
 export default async function RocketsPage() {
     const rocketsResponse = await getRockets();

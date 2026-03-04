@@ -5,7 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - 'backend/**'
-      - 'template.yaml'
+      - 'infra/app.yaml'
 jobs:
   test:
     name: Run Unit Tests
@@ -55,7 +55,7 @@ jobs:
           aws-region: us-east-1
           
       - name: SAM Build
-        run: sam build
+        run: sam build --template-file infra/app.yaml
         
       - name: SAM Deploy
         run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset

@@ -35,7 +35,7 @@ Resources:
   IngestFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: backend/ingest/
+      CodeUri: ../backend/ingest/
       Handler: core_ingestion.lambda_handler
       Timeout: 300      # 5 minutes for fetching and pushing data
       MemorySize: 512
@@ -58,7 +58,7 @@ Resources:
   AppFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: backend/app/
+      CodeUri: ../backend/app/
       Handler: main.handler  # Mangum wrapper for FastAPI
       Timeout: 10
       MemorySize: 256
@@ -81,3 +81,5 @@ Outputs:
   ApiUrl:
     Description: "API Gateway endpoint URL for Prod environment"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+    Export:
+      Name: SpaceXef-ApiUrl

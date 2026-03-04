@@ -9,6 +9,8 @@ import { CrewGrid, EmptyCrewCard } from "@/components/CrewGrid";
 import { PayloadGrid } from "@/components/PayloadGrid";
 import { FailureList } from "@/components/FailureList";
 
+export const dynamic = 'force-dynamic';
+
 export default async function LaunchDetail({ params }: { params: Promise<{ id: string }> }) {
     let launch;
     try {

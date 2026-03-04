@@ -2,6 +2,7 @@ import { getLaunches } from "@/actions/actions";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { LaunchListCard } from "@/components/LaunchListCard";
 import { InfiniteLaunchScroll } from "@/components/InfiniteLaunchScroll";
+export const dynamic = 'force-dynamic';
 
 export default async function LaunchesPage({
     searchParams,

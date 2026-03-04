@@ -1,12 +1,15 @@
 version = 0.1
 
+[default.build.parameters]
+template_file = "infra/app.yaml"
+
 [default.deploy.parameters]
 stack_name = "spaceXef-backend"
 resolve_s3 = true
 s3_prefix = "spaceXef-backend"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-disable_rollback = true
+disable_rollback = false
 image_repositories = []
 
 [default.global.parameters]

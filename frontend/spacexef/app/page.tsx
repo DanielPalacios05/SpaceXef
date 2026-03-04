@@ -5,6 +5,7 @@ import { Rocket } from "lucide-react";
 import Image from "next/image";
 import { LaunchTimeline } from "@/components/LaunchTimeline";
 import { StatusBadge } from "@/components/StatusBadge";
+export const dynamic = 'force-dynamic';
 
 export default async function Home() {
   // Fetch data in parallel

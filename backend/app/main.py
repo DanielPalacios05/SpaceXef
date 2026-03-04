@@ -9,7 +9,12 @@ from typing import Optional
 from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError
 
-app = FastAPI(title="SpaceXef API", description="Read-Only API connected to DynamoDB Single-Table")
+root_path = "/Prod" if os.environ.get("AWS_EXECUTION_ENV") else ""
+app = FastAPI(
+    title="SpaceXef API", 
+    description="Read-Only API connected to DynamoDB Single-Table",
+    root_path=root_path
+)
 
 # Enable CORS for local/frontend testing
 app.add_middleware(

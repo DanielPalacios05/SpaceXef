@@ -2,7 +2,7 @@
 
 import { PaginatedLaunchesSchema, LaunchSchema, RocketListResponseSchema, StatsSchema, Stats, PaginatedLaunches, Rocket, Launch } from "@/domain/models";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001";
+const API_BASE_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001";
 
 export async function getStats(): Promise<Stats> {
     const res = await fetch(`${API_BASE_URL}/stats`, {
