@@ -14,7 +14,7 @@ SpaceXef (SpaceX Efficient Finding) es una solución que consume datos de lanzam
 
 ### 1. Base de Datos (Amazon DynamoDB)
 - **Patrón Single-Table Design:** Utiliza una única tabla (`SpaceXef-Data`) para abstraer *Launches*, *Rockets* y *Stats*.
-- **Paginación Nativa:** El `SK` (Sort Key) combina un *Unix Time* con el ID para permitir escaneos cronológicos hacia atrás instantáneos de lanzamientos permitien la llamada eficiente de datos.
+- **Ordenamiento eficiente:** Para recuperar los lanzamientos en orden cronológico se utiliza el `SK` (Sort Key) combina un *Unix Time* con el ID para la llamada eficiente de datos en el orden que de primera mano nos interesa.
 #### Referencias
 - https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.CoreComponents.html#HowItWorks.CoreComponents.TablesItemsAttributes
 
