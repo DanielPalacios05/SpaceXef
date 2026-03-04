@@ -2,12 +2,15 @@
 
 SpaceXef (SpaceX Efficient Finding) es una solución que consume datos de lanzamientos desde la API de SpaceX, los almacena eficientemente en la nube y los visualiza a través de una aplicación web.
 
-**Aplicación Web:** [http://SpaceXef-Frontend-ALB-498435409.us-east-1.elb.amazonaws.com](http://SpaceXef-Frontend-ALB-498435409.us-east-1.elb.amazonaws.com)  
-**Backend API Docs:** [https://epnfnmp8b5.execute-api.us-east-1.amazonaws.com/Prod/docs](https://epnfnmp8b5.execute-api.us-east-1.amazonaws.com/Prod/docs)
+**Aplicación Web:** [http://SpaceXef-Frontend-ALB-489920178.us-east-1.elb.amazonaws.com](http://SpaceXef-Frontend-ALB-489920178.us-east-1.elb.amazonaws.com)  
+**Swagger (API Docs):** [https://bj3mpcq27j.execute-api.us-east-1.amazonaws.com/Prod/docs](https://bj3mpcq27j.execute-api.us-east-1.amazonaws.com/Prod/docs)  
+**Trigger Ingestión:** [https://bj3mpcq27j.execute-api.us-east-1.amazonaws.com/Prod/ingest](https://bj3mpcq27j.execute-api.us-east-1.amazonaws.com/Prod/ingest)
 
-** Trigger Ingestión:** [https://epnfnmp8b5.execute-api.us-east-1.amazonaws.com/Prod/ingest](https://epnfnmp8b5.execute-api.us-east-1.amazonaws.com/Prod/ingest)
+
 
 ## Arquitectura 
+
+![alt text](image-12.png)
 
 ### 1. Base de Datos (Amazon DynamoDB)
 - **Patrón Single-Table Design:** Utiliza una única tabla (`SpaceXef-Data`) para abstraer *Launches*, *Rockets* y *Stats*.
@@ -206,25 +209,9 @@ aws cloudformation describe-stacks --stack-name spaceXef-frontend --query 'Stack
 
 ## 🔄 Integración y Despliegue Continuo (CI/CD GitHub Actions)
 
-El proyecto contiene dos sólidas *workflows* de **GitHub Actions** (`.github/workflows/`), separando elegantemente la capa backend y frontend para evitar despliegues inactivos.
+El proyecto contiene tres *workflows* de **GitHub Actions** (`.github/workflows/`), separando la capa de backend, frontend y registro para evitar despliegues inactivos y optimizar el tiempo de ejecución.
 
-1. **`backend.yml`**:
-   - Se activa cuando hay un `push` a la carpeta `/backend/` o al archivo `infra/app.yaml`.
-   - **Flujo**: Configura Python 3.13 → Ejecuta pruebas con `pytest` → En caso de éxito, ejecuta un `sam build` seguido de un `sam deploy` hacia AWS.
-
-2. **`ecr.yml`**:
-   - Se activa con cambios en `infra/ecr-stack.yaml` o manualmente (`workflow_dispatch`).
-   - Sirve para asegurar que el repositorio de ECR exista de forma independiente.
-
-3. **`frontend.yml`**:
-   - Se activa con cambios en `/frontend/spacexef/` o `infra/frontend-stack.yaml`.
-   - **Flujo de Pruebas**: Configura Node 20 → Ejecuta Linters → Pasa las pruebas automatizadas de Vitest.
-   - **Flujo de Construcción (Solo en `main`)**: Autentica en AWS → Hace el *build* de la imagen de Docker pasándole al servidor standalone sus variables → Hace `push` masivo hacia **Amazon ECR**.
-   - **Flujo de Despliegue**: Modifica o crea la infraestructura `CloudFormation` pertinente y forza una rotación escalonada sin tiempo de inactividad (Zero-Downtime) dentro del cluster de **ECS Fargate**.
-
-Ambos pipelines implementan mitigación de errores; el backend específicamente incluye confirmación de despliegue protegido. El backend utiliza el modo de **Rollback Automático** asegurando en todo momento configuraciones estables (`disable_rollback = false` en `samconfig.toml`).
-
-### ¿Cómo habilitar las GitHub Actions?
+### Pre-requisitos
 Para que los pipelines de CI/CD funcionen correctamente al hacer *Push* a tu cuenta de GitHub, debes ir a la configuración de tu repositorio (**Settings > Secrets and variables > Actions**) y configurar lo siguiente:
 
 **1. Variables de Repositorio (Repository Variables):**
@@ -234,3 +221,46 @@ Para que los pipelines de CI/CD funcionen correctamente al hacer *Push* a tu cue
 **2. Secretos de Repositorio (Repository Secrets):**
 - `AWS_ACCESS_KEY_ID`: Tu access key de IAM.
 - `AWS_SECRET_ACCESS_KEY`: Tu secret key de IAM.
+
+### 1. Backend CI/CD (`backend.yml`)
+Se activa al hacer `push` en `/backend/` o `infra/app.yaml`.
+Consta de dos Jobs (Trabajos) secuenciales:
+
+- **Job `test` (Run Unit Tests):**
+  - **`Checkout repository`**: Clona el código fuente.
+  - **`Set up Python 3.13`**: Instala el intérprete de Python en el runner de GitHub e inicializa la caché para PIP.
+  - **`Install dependencies`**: Ejecuta `pip install` para instalar tanto las dependencias de la API FastAPI y la función Ingest (`requirements-dev.txt` y `requirements.txt`).
+  - **`Run Pytest`**: Establece el `PYTHONPATH` a la carpeta `ingest` y pasa las pruebas de unidad asegurando que ninguna regresión haya roto el procesamiento de datos.
+
+- **Job `deploy` (Deploy to AWS):** (Condicionado a que `test` termine con éxito).
+  - **`Set up Python`** y **`Setup AWS SAM CLI`**: Preparan el empaquetador oficial Serverless Application Model.
+  - **`Configure AWS credentials`**: Utiliza los secretos incrustados en GitHub para adquirir un rol de sesión seguro en la nube.
+  - **`SAM Build`** y **`SAM Deploy`**: Empaquetan el código y actualizan o crean el CloudFormation stack `spaceXef-backend`. Gracias a las configuraciones en `samconfig.toml`, esto implementa de forma automática la mitigación de fallos (`disable_rollback = false`), lo que indica que CloudFormation revertirá la base de datos o lambdas limpiamente a su último estado estable si hay un error parcial.
+
+
+### 2. Frontend CI/CD (`frontend.yml`)
+Se activa en `push` y `pull_request` a `/frontend/spacexef/` o `infra/frontend-stack.yaml`.
+Flujo compuesto de dos Jobs paralelos condicionales:
+
+- **Job `build_and_test`:** (Verifica la salud del código)
+  - **`Use Node.js 20.x`**: Instala node y usa la directiva de caché para ahorrar tiempo en futuras descargas de los módulos en base a los hash de `package-lock.json`.
+  - **`Install dependencies`**: Usa instalar limpio de Node (`npm ci`) protegiendo las versiones ancladas exactas.
+  - **`Run linting`**: Chequea faltas de estilo / advertencias usando ESLint.
+  - **`Run unit tests`**: Prueba componentes y funciones con Vitest.
+  - **`Build Next.js app`**: Valida que la aplicación se renderice e hidrate correctamente haciendo un simulacro de empaquetado `production`.
+
+- **Job `deploy` (Deploy to AWS):** (Solo se ejecuta si el trigger es un `push` a la rama `main` y `build_and_test` pasa exitosamente).
+  - **`Configure AWS credentials`** y **`Login to Amazon ECR`**: Ganan token de subida de imágenes para el registro privado.
+  - **`Build, tag, and push Docker image`**: Extrae localmente la variable dinámica `${{ github.sha }}` de la acción para inyectarla como Tag. Luego construye Next.js dentro del contenedor local, y realiza un ciclo `docker push` masivo (con el Commit Hash y el tag dinámico `latest`) hacia Amazon ECR.
+  - **`Deploy CloudFormation stack`**: Comunica el Tag `${{ github.sha }}` exacto como variable de entorno usando `aws cloudformation deploy`, y fuerza una actualización de la plantilla ECS Fargate. Esto desencadena una rotación de Contenedores y Load Balancers *Blue/Green* nativa (Zero-Downtime), que no finaliza la versión antigua del Frontend hasta que comprueba que esta nueva imagen devuelve respuestas `HttpCode: 200` en su ruta principal.
+
+
+### 3. Registro Base (`ecr.yml`)
+- **Job `deploy`**: Workflow utilitario que provisiona permanentemente la base de recepción (`aws cloudformation deploy` sobre `infra/ecr-stack.yaml`). Está diseñado para evitar bloqueos por dependencias mutuas (Chicken-and-Egg) cuando se levanta el proyecto por primera vez.
+
+---
+
+### Posibles Mejoras (Cómo optimizar estos Workflows)
+
+- **Caching de Capas Docker**: Cachear las capas de la imagen del frontend en ECR reduciría radicalmente el tiempo de la fase *build*.
+- **Separación en flujos de desarrollo**: Añadir ramas y ambientes de *Staging* para probar cambios antes de integrarlos a Producción, utilizando Reglas de Protección de Ramas.
